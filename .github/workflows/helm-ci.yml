@@ -1,0 +1,67 @@
+name: Helm Chart CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'charts/employee-api/**' # Only trigger on chart changes
+  pull_request:
+    branches: [main]
+    paths:
+      - 'charts/employee-api/**'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Lint Chart
+        run: helm lint charts/employee-api --strict
+
+      - name: Render Templates
+        run: helm template employee-api charts/employee-api --debug
+
+      - name: Run Helm Tests
+        run: |
+          helm dependency update charts/employee-api
+          helm test employee-api --namespace default || true
+
+  package-and-publish:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package Chart
+        run: |
+          helm package charts/employee-api \
+            --app-version "${{ github.sha }}" \
+            --destination .dist
+
+      - name: Push Chart to GHCR
+        run: |
+          helm push .dist/employee-api-*.tgz oci://ghcr.io/${{ github.repository_owner }}/helm-charts

@@ -1,0 +1,62 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/ccdennar/employee-management-app/employee-api
+  pullPolicy: IfNotPresent
+  tag: ""  # Set by CI via --set image.tag=$SHA
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+config:
+  databaseUrl: ""  # Injected via Secret in production
+  logLevel: "info"
+
+ingress:
+  enabled: false
+  className: "nginx"
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+serviceAccount:
+  create: true
+  name: ""  # Leave empty to use fullname template
+  annotations: {}
+
+# OpenShift-specific configuration
+route:
+  enabled: true
+  host: "employee-api.example.com"
+
+# SCC-compliant security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL

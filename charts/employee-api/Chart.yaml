@@ -1,0 +1,12 @@
+apiVersion: v2
+name: employee-api
+description: Employee Management API Helm Chart
+type: application
+version: 0.1.0        # Chart version (semver)
+appVersion: "1.0.0"   # Application version (updated by CI)
+keywords:
+  - fastapi
+  - employee-management
+maintainers:
+  - name: Platform Team
+    email: platform@example.com

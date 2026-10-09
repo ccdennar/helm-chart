@@ -1,0 +1,170 @@
+---
+# Source: employee-api/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: employee-api-deny-all
+  labels:
+    helm.sh/chart: employee-api-0.1.0
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: employee-api
+      app.kubernetes.io/instance: employee-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Source: employee-api/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: employee-api
+  labels:
+    helm.sh/chart: employee-api-0.1.0
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: employee-api/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: employee-api
+  labels:
+    helm.sh/chart: employee-api-0.1.0
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+
+---
+# Source: employee-api/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: employee-api
+  labels:
+    helm.sh/chart: employee-api-0.1.0
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: employee-api
+      app.kubernetes.io/instance: employee-api
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: employee-api-0.1.0
+        app.kubernetes.io/name: employee-api
+        app.kubernetes.io/instance: employee-api
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: employee-api
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: employee-api
+          image: "ghcr.io/ccdennar/employee-management-app/employee-api:1.0.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+
+---
+# Source: employee-api/templates/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: employee-api
+  labels:
+    helm.sh/chart: employee-api-0.1.0
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: employee-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# Source: employee-api/templates/route.yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: employee-api
+  labels:
+    helm.sh/chart: employee-api-0.1.0
+    app.kubernetes.io/name: employee-api
+    app.kubernetes.io/instance: employee-api
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  host: "staging.employee-api.example.com"
+  to:
+    kind: Service
+    name: employee-api
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
