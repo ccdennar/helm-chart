@@ -1,4 +1,8 @@
-{{- if .Values.ingress.enabled -}}
+{{- /*
+  OpenShift Route: rendered only when explicitly enabled AND the cluster
+  serves route.openshift.io/v1. On minikube/vCluster this renders nothing.
+*/ -}}
+{{- if and .Values.route.enabled (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

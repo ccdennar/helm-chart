@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "employee-api.fullname" . }}-test-connection"
+  labels:
+    {{- include "employee-api.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  containers:
+    - name: wget
+      image: busybox:1.36
+      command: ['wget']
+      args: [
+        '--timeout=5',
+        '--tries=1',
+        'http://{{ include "employee-api.fullname" . }}:{{ .Values.service.port }}/health/live'
+      ]
+  restartPolicy: Never

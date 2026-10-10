@@ -1,4 +1,8 @@
-{{- if .Values.route.enabled }}
+{{- /*
+  OpenShift Route: rendered only when explicitly enabled AND the cluster
+  serves route.openshift.io/v1. On minikube/vCluster this renders nothing.
+*/ -}}
+{{- if and .Values.route.enabled (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -6,11 +10,12 @@ metadata:
   labels:
     {{- include "employee-api.labels" . | nindent 4 }}
 spec:
-  host: {{ .Values.route.host | quote }}
+  {{- if .Values.route.host }}
+  host: {{ .Values.route.host }}
+  {{- end }}
   to:
     kind: Service
     name: {{ include "employee-api.fullname" . }}
-    weight: 100
   port:
     targetPort: http
   tls:
