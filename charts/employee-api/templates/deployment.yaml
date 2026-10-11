@@ -40,10 +40,17 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          
+          # ✅ CRITICAL FIX: DATABASE_URL injected as env var, NOT hardcoded in Python
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://{{ .Values.secret.dbUser }}:{{ .Values.secret.dbPassword }}@{{ include \"employee-api.fullname\" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.secret.dbName }}"
+          
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
