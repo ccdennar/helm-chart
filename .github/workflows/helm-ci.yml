@@ -31,6 +31,13 @@ jobs:
       - name: Render Templates
         run: helm template employee-api charts/employee-api --debug
 
+      # 👇 THIS IS THE MISSING PIECE
+      - name: Set up Kubernetes cluster (kind)
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: test-cluster
+          wait: 120s
+
       - name: Run Helm Tests
         run: |
           # Update dependencies first (e.g., PostgreSQL subchart)
