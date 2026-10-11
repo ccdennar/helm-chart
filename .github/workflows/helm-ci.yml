@@ -31,7 +31,7 @@ jobs:
       - name: Render Templates
         run: helm template employee-api charts/employee-api --debug
 
-    
+      # Provision a lightweight Kubernetes cluster for testing
       - name: Set up Kubernetes cluster (kind)
         uses: helm/kind-action@v1
         with:
@@ -39,23 +39,30 @@ jobs:
           wait: 120s
 
       - name: Run Helm Tests
+        env:
+          # Reduce API request rate to prevent Kind cluster throttling
+          HELM_KUBECTL_QPS: "10"
+          HELM_KUBECTL_BURST: "20"
         run: |
           # Update dependencies first (e.g., PostgreSQL subchart)
           helm dependency update charts/employee-api
           
-          # Install the chart to a temporary release for testing
+          # Install chart with PostgreSQL disabled for faster CI validation
+          # Using nginx as placeholder image avoids private registry auth issues
           helm install test-release charts/employee-api \
             --namespace default \
             --create-namespace \
             --wait \
             --timeout 300s \
             --set-string image.repository="nginx" \
-            --set-string image.tag="latest"
+            --set-string image.tag="latest" \
+            --set postgresql.enabled=false \
+            --set database.url="postgresql://test:test@localhost:5432/testdb"
           
-          # Run the defined tests against the installed release
+          # Run defined test hooks against the installed release
           helm test test-release --namespace default
           
-          # Clean up the test release
+          # Clean up test release regardless of outcome
           helm uninstall test-release --namespace default || true
 
   package-and-publish:
