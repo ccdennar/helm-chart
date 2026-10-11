@@ -42,9 +42,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: DATABASE_URL
-              value: "postgresql://{{ .Values.secret.dbUser }}:{{ .Values.secret.dbPassword }}@{{ include \"employee-api.fullname\" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.secret.dbName }}"
-
-          ports: 
+              value: {{ printf "postgresql://%s:%s@%s-postgresql.%s.svc.cluster.local:5432/%s" .Values.secret.dbUser .Values.secret.dbPassword (include "employee-api.fullname" .) .Release.Namespace .Values.secret.dbName | quote }}
+          ports:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
