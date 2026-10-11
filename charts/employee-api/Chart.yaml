@@ -1,12 +1,21 @@
 apiVersion: v2
 name: employee-api
-description: Employee Management API Helm Chart
+description: Employee Management API with integrated PostgreSQL
 type: application
-version: 0.1.0        # Chart version (semver)
-appVersion: "1.0.0"   # Application version (updated by CI)
+version: 0.1.0
+appVersion: "1.0.0"
+
 keywords:
   - fastapi
   - employee-management
+  - postgresql
+
 maintainers:
   - name: Platform Team
     email: platform@example.com
+
+dependencies:
+  - name: postgresql
+    version: "15.5.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled

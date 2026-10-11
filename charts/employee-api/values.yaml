@@ -60,3 +60,5 @@ containerSecurityContext:
   capabilities:
     drop:
       - ALL
+
+      
