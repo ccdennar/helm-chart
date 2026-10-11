@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'charts/employee-api/**' # Only trigger on chart changes
+      - 'charts/employee-api/**'
   pull_request:
     branches: [main]
     paths:
@@ -33,8 +33,23 @@ jobs:
 
       - name: Run Helm Tests
         run: |
+          # Update dependencies first (e.g., PostgreSQL subchart)
           helm dependency update charts/employee-api
-          helm test employee-api --namespace default || true
+          
+          # Install the chart to a temporary release for testing
+          helm install test-release charts/employee-api \
+            --namespace default \
+            --create-namespace \
+            --wait \
+            --timeout 300s \
+            --set-string image.repository="nginx" \
+            --set-string image.tag="latest"
+          
+          # Run the defined tests against the installed release
+          helm test test-release --namespace default
+          
+          # Clean up the test release
+          helm uninstall test-release --namespace default || true
 
   package-and-publish:
     needs: lint-and-test
@@ -58,6 +73,7 @@ jobs:
 
       - name: Package Chart
         run: |
+          mkdir -p .dist
           helm package charts/employee-api \
             --app-version "${{ github.sha }}" \
             --destination .dist
