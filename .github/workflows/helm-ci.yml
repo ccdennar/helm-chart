@@ -31,13 +31,13 @@ jobs:
       - name: Render Templates
         run: helm template employee-api charts/employee-api --debug
 
-      # Provision Kind cluster with increased resources to handle API load
+      # Provision Kind cluster with tuned API server limits
       - name: Set up Kubernetes cluster (kind)
         uses: helm/kind-action@v1
         with:
           cluster_name: test-cluster
           wait: 120s
-          # Give Kind extra CPU/RAM to prevent API server throttling
+          # ✅ CRITICAL FIX: Use literal block scalar for inline config
           config: |
             kind: Cluster
             apiVersion: kind.x-k8s.io/v1alpha4
@@ -53,14 +53,12 @@ jobs:
 
       - name: Run Helm Tests
         run: |
-          # Update dependencies first
           helm dependency update charts/employee-api
           
-          # Pre-create namespace to reduce one API call during install
+          # Pre-create namespace to reduce API calls during install
           kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
           
-          # Install chart with minimal resource footprint
-          # Using nginx avoids private registry auth; disabling postgres reduces StatefulSet overhead
+          # Install with minimal footprint; nginx avoids private registry auth
           helm install test-release charts/employee-api \
             --namespace default \
             --wait \
@@ -71,10 +69,7 @@ jobs:
             --set database.url="postgresql://test:test@localhost:5432/testdb" \
             --atomic
           
-          # Run defined test hooks
           helm test test-release --namespace default
-          
-          # Clean up regardless of outcome
           helm uninstall test-release --namespace default || true
 
   package-and-publish:
