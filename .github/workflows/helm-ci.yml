@@ -43,8 +43,8 @@ jobs:
               kind: ClusterConfiguration
               apiServer:
                 extraArgs:
-                  max-mutating-requests-inflight: "600"
-                  max-requests-inflight: "1000"
+                  max-mutating-requests-inflight: "400"
+                  max-requests-inflight: "600"
           EOF
 
       - name: Set up Kubernetes cluster (kind)
@@ -56,32 +56,46 @@ jobs:
 
       - name: Run Helm Tests
         run: |
+          set +e  # ✅ Disable exit-on-error so we can handle failures manually
+          
           helm dependency update charts/employee-api
           
-          # Pre-create namespace to reduce one mutating API call during install
-          kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null || true
           
-          # ✅ CRITICAL FIXES:
-          # 1. Removed --atomic (prevents retry storms that exhaust API quota)
-          # 2. Increased timeout to 600s (gives API server time to process bursts)
-          # 3. Added --history-max 1 (reduces secret size and API write load)
+          # ✅ Removed --history-max (not available in Helm v3.14.0)
+          # ✅ Kept --atomic removed to prevent rollback API storms
           helm install test-release charts/employee-api \
             --namespace default \
             --wait \
             --timeout 600s \
-            --history-max 1 \
             --set-string image.repository="nginx" \
             --set-string image.tag="latest" \
             --set postgresql.enabled=false \
-            --set database.url="postgresql://test:test@localhost:5432/testdb"
+            --set database.url="postgresql://test:test@localhost:5432/testdb" \
+            --set replicaCount=1
           
-          # Only run tests if install succeeded
-          if [ $? -eq 0 ]; then
+          INSTALL_EXIT=$?
+          
+          if [ $INSTALL_EXIT -eq 0 ]; then
             helm test test-release --namespace default
+            TEST_EXIT=$?
+          else
+            TEST_EXIT=1
           fi
           
-          # Always clean up
+          # Always clean up regardless of outcome
           helm uninstall test-release --namespace default || true
+          
+          set -e  # Re-enable strict mode
+          
+          # Fail the step if either install or test failed
+          if [ $INSTALL_EXIT -ne 0 ]; then
+            echo "::error::Helm install failed with exit code $INSTALL_EXIT"
+            exit $INSTALL_EXIT
+          elif [ $TEST_EXIT -ne 0 ]; then
+            echo "::error::Helm test failed with exit code $TEST_EXIT"
+            exit $TEST_EXIT
+          fi
 
   package-and-publish:
     needs: lint-and-test
