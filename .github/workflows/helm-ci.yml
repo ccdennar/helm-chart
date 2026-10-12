@@ -56,44 +56,64 @@ jobs:
 
       - name: Run Helm Tests
         run: |
-          set +e  # ✅ Disable exit-on-error so we can handle failures manually
+          set +e
           
           helm dependency update charts/employee-api
           
           kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null || true
           
-          # ✅ Removed --history-max (not available in Helm v3.14.0)
-          # ✅ Kept --atomic removed to prevent rollback API storms
+          # ✅ CRITICAL: Use --dry-run=server to validate without creating resources
+          # This proves the chart renders correctly AND passes API validation
+          # without triggering the rate limiter at all
           helm install test-release charts/employee-api \
             --namespace default \
-            --wait \
-            --timeout 600s \
+            --dry-run=server \
             --set-string image.repository="nginx" \
             --set-string image.tag="latest" \
             --set postgresql.enabled=false \
             --set database.url="postgresql://test:test@localhost:5432/testdb" \
             --set replicaCount=1
           
-          INSTALL_EXIT=$?
+          DRYRUN_EXIT=$?
           
-          if [ $INSTALL_EXIT -eq 0 ]; then
-            helm test test-release --namespace default
-            TEST_EXIT=$?
+          if [ $DRYRUN_EXIT -eq 0 ]; then
+            echo "✅ Chart passed server-side dry-run validation"
+            
+            # Only attempt real install if dry-run succeeded
+            # Reduced timeout since we know resources are valid
+            helm install test-release charts/employee-api \
+              --namespace default \
+              --wait \
+              --timeout 300s \
+              --set-string image.repository="nginx" \
+              --set-string image.tag="latest" \
+              --set postgresql.enabled=false \
+              --set database.url="postgresql://test:test@localhost:5432/testdb" \
+              --set replicaCount=1
+            
+            INSTALL_EXIT=$?
+            
+            if [ $INSTALL_EXIT -eq 0 ]; then
+              helm test test-release --namespace default
+              TEST_EXIT=$?
+            else
+              TEST_EXIT=1
+            fi
           else
+            echo "::error::Chart failed server-side dry-run validation"
+            INSTALL_EXIT=1
             TEST_EXIT=1
           fi
           
-          # Always clean up regardless of outcome
-          helm uninstall test-release --namespace default || true
+          helm uninstall test-release --namespace default 2>/dev/null || true
           
-          set -e  # Re-enable strict mode
+          set -e
           
-          # Fail the step if either install or test failed
-          if [ $INSTALL_EXIT -ne 0 ]; then
-            echo "::error::Helm install failed with exit code $INSTALL_EXIT"
+          if [ $DRYRUN_EXIT -ne 0 ]; then
+            exit $DRYRUN_EXIT
+          elif [ $INSTALL_EXIT -ne 0 ]; then
             exit $INSTALL_EXIT
           elif [ $TEST_EXIT -ne 0 ]; then
-            echo "::error::Helm test failed with exit code $TEST_EXIT"
             exit $TEST_EXIT
           fi
 
