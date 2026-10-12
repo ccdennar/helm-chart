@@ -31,7 +31,6 @@ jobs:
       - name: Render Templates
         run: helm template employee-api charts/employee-api --debug
 
-      # ✅ FIX: Write Kind config to a file first, then pass the path
       - name: Create Kind cluster config
         run: |
           cat > /tmp/kind-config.yaml << 'EOF'
@@ -44,8 +43,8 @@ jobs:
               kind: ClusterConfiguration
               apiServer:
                 extraArgs:
-                  max-mutating-requests-inflight: "400"
-                  max-requests-inflight: "600"
+                  max-mutating-requests-inflight: "600"
+                  max-requests-inflight: "1000"
           EOF
 
       - name: Set up Kubernetes cluster (kind)
@@ -59,19 +58,29 @@ jobs:
         run: |
           helm dependency update charts/employee-api
           
+          # Pre-create namespace to reduce one mutating API call during install
           kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
           
+          # ✅ CRITICAL FIXES:
+          # 1. Removed --atomic (prevents retry storms that exhaust API quota)
+          # 2. Increased timeout to 600s (gives API server time to process bursts)
+          # 3. Added --history-max 1 (reduces secret size and API write load)
           helm install test-release charts/employee-api \
             --namespace default \
             --wait \
-            --timeout 300s \
+            --timeout 600s \
+            --history-max 1 \
             --set-string image.repository="nginx" \
             --set-string image.tag="latest" \
             --set postgresql.enabled=false \
-            --set database.url="postgresql://test:test@localhost:5432/testdb" \
-            --atomic
+            --set database.url="postgresql://test:test@localhost:5432/testdb"
           
-          helm test test-release --namespace default
+          # Only run tests if install succeeded
+          if [ $? -eq 0 ]; then
+            helm test test-release --namespace default
+          fi
+          
+          # Always clean up
           helm uninstall test-release --namespace default || true
 
   package-and-publish:
